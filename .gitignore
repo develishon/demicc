@@ -1,0 +1,7 @@
+# binary files:
+demicc
+
+# object files:
+*.o
+*.obj
+

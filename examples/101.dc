@@ -1,0 +1,161 @@
+// 101.dc - beginner guide
+// compile './demicc 101 ./examples/101.dc'
+// or      './demicc 101 101.dc'
+// and then run './101'
+// it might require 'chmod 0777 ./101'
+
+// this is a comment
+
+// int - signed 64-bit integer
+// zero initialized global variable
+int g;
+
+int factorial(int number)
+{
+  // uninitialized local variable
+  int result;
+  
+  // if-else statement, comparasion operators '>', '<', '>=', '<=', '==', and '!='
+  if number <= 1
+  {
+    // expression, assignment operator, and decimal integer constant
+    // '=' evaluated right to left and has the highest precedence among binary operators
+    result = 1;
+  }
+  else
+  {
+    // function call, arithmetic operators '+', '-', '*', '/', and '%'
+    result = factorial(number - 1);
+    result = result * number;
+  }
+  
+  // return statement
+  return result;
+}
+
+// the entry point
+int main(int argc, int argv)
+{
+  g = factorial(5);
+  
+  // implicit declaration, string literal, and hexadecimal escape sequence
+  write(1, "Hello, DemiC!!!\0A", 16);
+  
+  // character constant (up to 8 bytes)
+  putchr('f(5) = ');
+  
+  putdec(g);
+  putchr('\A');
+  
+  int i;
+  int arg;
+  
+  i = 0;
+  
+  // command line arguments
+  while i < argc
+  {
+    // sub-expressions
+    arg = argv + (i * 8);
+    
+    putdec(i);
+    putstr(")   ");
+    
+    // load int by pointer with '*' prefix operator
+    putstr(*arg);
+    putchr('\A');
+    
+    i = i + 1;
+  }
+
+  // return 0 by default
+}
+
+int write(int fd, int buf, int count)
+{
+  // Linux x86-64 sycall
+  // int syscall(int rax, int rdi, int rsi, int rdx, int r10, int r8, int r9); 
+  return syscall(1, fd, buf, count, 0, 0, 0);
+}
+
+int putdec(int number)
+{
+  int digits;
+  int power;
+  int c;
+  
+  digits = 1;
+  power = 10;
+  
+  // implicit "!= 0"
+  while number / power
+  {
+    power = power * 10;
+    digits = digits + 1;
+  }
+  
+  while digits > 0
+  {
+    power = power / 10;
+    
+    // all binary operators (except '=') have the same precedence and evaluated left to right
+    // read: c = (((number / power) % 10) + '0')
+    c = number / power % 10 + '0';
+    
+    putchr(c);
+    
+    digits = digits - 1;
+  }
+}
+
+int putchr(int chr)
+{
+  int count;
+  
+  count = 0;
+  
+  // bit shift operators '<<', and '>>'
+  while chr >> count
+  {
+    count = count + 8;
+  }
+  
+  while count >= 0 
+  {
+    int byte;
+  
+    // store 1 byte by pointer
+    // int st_u8(int pointer, int value);
+    // take a pointer with '&' prefix operator
+    // bitwise operators '&', '|', and '^'
+    // hexadecimal integer constant
+    st_u8(&byte, chr >> count & 0xFF);
+    
+    write(1, &byte, 1);
+    
+    count = count - 8;
+  }
+  
+  // 'byte' is not available outside of its scope
+}
+
+int strlen(int cstring)
+{
+  int start;
+  
+  start = cstring;
+
+  // load 1 byte by pointer
+  // int ld_u8(int pointer);
+  while ld_u8(cstring)
+    // single-statement body in 'while', 'if', 'else', and functions
+    cstring = cstring + 1;
+  
+  return cstring - start;
+}
+
+int putstr(int cstring)
+  write(1, cstring, strlen(cstring));
+
+
+
