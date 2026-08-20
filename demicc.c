@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.1.0 */
+/* VERSION: 1.1.1 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -354,30 +354,21 @@ static void compile_statement(Sym *func)
   
     scan_if(strcmp(currtok, "}") == 0, "missing '}'");
   }
-  else if (scan_if(strcmp(currtok, "if") == 0, NULL)) /* FEATURE: if */
+  else if (scan_if(strcmp(currtok, "if") == 0 || strcmp(currtok, "while") == 0, NULL)) /* FEATURE: if & while */
   {
+    off2 = (strcmp(prevtok, "while") == 0) ? exesize : 0;
     rvalue_from(compile_expression(0));
     off1 = 6 + emit_bytes(10, "\x58\x48\x85\xc0\x0f\x84\0\0\0\0"); /* ASM: pop %rax; test %rax, %rax; jz <rel32>; */
     compile_statement(func);
-    *(s32 *)(exebuff + off1) = exesize - off1 - 4; /* jump over the true-branch */
+    *(s32 *)(exebuff + off1) = (exesize + 5) - off1 - 4; /* break or jump over the true-branch */
+    off1 = 1 + emit_bytes(5, "\xe9\0\0\0\0"); /* ASM: jmp <rel32>; */
+    *(s32 *)(exebuff + off1) = (off2 != 0) ? off2 - off1 - 4 : 0; /* loop or leave zero in case of an else branch */
     
-    if (scan_if(strcmp(currtok, "else") == 0, NULL)) /* FEATURE: else */
+    if (off2 == 0 && scan_if(strcmp(currtok, "else") == 0, NULL)) /* FEATURE: else */
     {
-      *(s32 *)(exebuff + off1) = (exesize + 5) - off1 - 4; /* goto else-branch */
-      off1 = 1 + emit_bytes(5, "\xe9\0\0\0\0"); /* ASM: jmp <rel32>; */
       compile_statement(func);
       *(s32 *)(exebuff + off1) = exesize - off1 - 4; /* jump over the else-branch */
     }
-  }
-  else if (scan_if(strcmp(currtok, "while") == 0, NULL)) /* FEATURE: while */
-  {
-    off2 = exesize;
-    rvalue_from(compile_expression(0));
-    off1 = 6 + emit_bytes(10, "\x58\x48\x85\xc0\x0f\x84\0\0\0\0"); /* ASM: pop %rax; test %rax, %rax; jz <rel32>; */
-    compile_statement(func);
-    *(s32 *)(exebuff + off1) = (exesize + 5) - off1 - 4; /* break */
-    off1 = 1 + emit_bytes(5, "\xe9\0\0\0\0"); /* ASM: jmp <rel32>; */
-    *(s32 *)(exebuff + off1) = off2 - off1 - 4; /* continue */
   }
   else if (scan_if(strcmp(currtok, "int") == 0, NULL)) /* FEATURE: symbol declaration */
   {

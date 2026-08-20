@@ -1,0 +1,22 @@
+// 003.dc - cat program
+
+int main()
+{
+  int byte;
+  int count;
+  
+  byte = 0;
+  count = 1;
+  
+  while count > 0
+  {
+    count = syscall(0, 0, &byte, 1, 0, 0, 0);
+    
+    if count == 1
+    {
+      syscall(1, 1, &byte, 1, 0, 0, 0);
+    }
+  }
+}
+
+
