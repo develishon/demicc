@@ -1,0 +1,64 @@
+// 004.dc - ASCII
+
+int main()
+{
+  int x;
+  int y;
+  int c;
+  
+  x = 0;
+  putchr(' ');
+  putchr(' ');
+  
+  while x < 16
+  {
+    putchr(' ');
+    putchr(int_to_digit(x));
+    x += 1;
+  }
+  
+  putchr('\A');
+  
+  y = 2;
+  
+  while y < 8
+  {
+    putchr(' ');
+    putchr(int_to_digit(y));
+    x = 0;
+    
+    while x < 16
+    {
+      putchr(' ');
+      c = y * 16 + x;
+      
+      if c == 0x7F  c = ' ';
+      
+      putchr(c);
+      x += 1;
+    }
+    
+    putchr('\A');
+    y += 1;
+  }
+}
+
+int putchr(int ch)
+{
+  int byte;
+  
+  st_u8(&byte, ch);
+  return syscall(1, 1, &byte, 1, 0, 0, 0);
+}
+
+int int_to_digit(int integer)
+{
+  if (0 <= integer) & (integer <= 9)
+    return '0' + integer;
+  
+  if (10 <= integer) & (integer <= 15)
+    return 'A' + integer - 10;
+  
+  return 'E';
+}
+

@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.1.1 */
+/* VERSION: 1.1.2 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -68,27 +68,6 @@ static void die_if(s32 condition, char *message)
     fprintf(stderr, "error: %s\n", message);
     exit(1);
   }
-}
-
-static u64 u64_from_string(s32 length, char *s, u64 base) /* base 0 means auto-detect */
-{
-  u64 value = 0;
-  s32 i = 0;
-  
-  if (base == 0 && length > 1 && s[0] == '0')
-  {
-    return u64_from_string(length - 2, s + 2, (s[1] == 'x') ? 16 : (s[1] == 'b') ? 2 : 10);
-  }
-  
-  base = (base != 0) ? base : 10;
-  
-  for (i = 0; i < length; ++i)
-  {
-    die_if(!isxdigit(s[i]), "invalid integer constant or escape sequence");
-    value = (value * base) + (isdigit(s[i]) ? s[i] - '0' : isupper(s[i]) ? s[i] - 'A' + 10 : s[i] - 'a' + 10);
-  }
-  
-  return value;
 }
 
 static s32 emit_bytes(s32 size, void *data)
@@ -194,8 +173,28 @@ static Sym *sym_declare(char *name)
   return topsym;
 }
 
-static void compile_string_literal(s32 length, char *token)
+static u64 u64_from_string(s32 length, char *s, u64 base) /* base 10 means auto-detect */
 {
+  u64 value = 0;
+  s32 i = 0;
+  
+  if (base == 10 && length >= 2 && s[0] == '0' && (s[1] == 'x' || s[1] == 'b'))
+  {
+    return u64_from_string(length - 2, s + 2, (s[1] == 'x') ? 16 : 2);
+  }
+  
+  for (i = 0; i < length; ++i)
+  {
+    die_if(!isxdigit(s[i]), "invalid integer constant or escape sequence");
+    value = (value * base) + (isdigit(s[i]) ? s[i] - '0' : isupper(s[i]) ? s[i] - 'A' + 10 : s[i] - 'a' + 10);
+  }
+  
+  return value;
+}
+
+static u64 compile_string_constant(s32 length, char *token)
+{
+  u64 constant = 0;
   s32 i = 0;
   s32 n = 0;
   unsigned char byte = 0;
@@ -212,9 +211,11 @@ static void compile_string_literal(s32 length, char *token)
     }
     
     emit_bytes(1, &byte);
+    constant = (constant << 8) + byte;
   }
   
   emit_bytes(1, "\0");
+  return constant;
 }
 
 static s32 compile_expression(s32 level)
@@ -229,18 +230,12 @@ static s32 compile_expression(s32 level)
   if (scan_if(isdigit(currtok[0]), NULL)) /* FEATURE: integer constant */
   {
     off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
-    *(u64 *)(exebuff + off1) = u64_from_string(strlen(prevtok), prevtok, 0);
+    *(u64 *)(exebuff + off1) = u64_from_string(strlen(prevtok), prevtok, 10);
   }
   else if (scan_if(currtok[0] == '\'', NULL)) /* FEATURE: character constant */
   {
     off1 = exesize;
-    compile_string_literal(strlen(prevtok) - 2, prevtok + 1);
-    
-    for (i = off1; i < exesize - 1; ++i)
-    {
-      constant = (constant << 8) + ((unsigned char *)exebuff)[i];
-    }
-    
+    constant = compile_string_constant(strlen(prevtok) - 2, prevtok + 1);
     exesize = off1;
     off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
     *(u64 *)(exebuff + off1) = constant;
@@ -248,7 +243,7 @@ static s32 compile_expression(s32 level)
   else if (scan_if(currtok[0] == '\"', NULL)) /* FEATURE: string literal */
   {
     off1 = 1 + emit_bytes(5, "\xe8\0\0\0\0"); /* ASM: call <rel32> */
-    compile_string_literal(strlen(prevtok) - 2, prevtok + 1);
+    compile_string_constant(strlen(prevtok) - 2, prevtok + 1);
     *(s32 *)(exebuff + off1) = exesize - off1 - 4;
     /* NOTE: we have the address on the stack thanks to the call instruction jumping over the string */
   }
