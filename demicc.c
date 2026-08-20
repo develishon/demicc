@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.0.1 */
+/* VERSION: 1.1.0 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -31,23 +31,33 @@ static Sym   symtab[0x10000]; /* the first symbol is "null" */
 static Sym  *topsym = symtab;
 
 static char *optable[] = { /* FEATURE: binary operators: = << >> <= >= == != < > - + & | ^ * / % */
-  "\x6\x3", "<<", "\x59\x58\x48\xd3\xe0\x50", /* ASM: pop %rcx; pop %rax; shl %cl, %rax; push %rax; */
-  "\x6\x3", ">>", "\x59\x58\x48\xd3\xe8\x50", /* ASM: pop %rcx; pop %rax; shr %cl, %rax; push %rax; */
-  "\xE\x3", "<=", "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7f\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jg  +3; inc %d; push %d;*/
-  "\xE\x3", ">=", "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7c\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jl  +3; inc %d; push %d;*/
-  "\xE\x3", "==", "\x59\x58\x48\x31\xd2\x48\x39\xc8\x75\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jne +3; inc %d; push %d;*/
-  "\xE\x3", "!=", "\x59\x58\x48\x31\xd2\x48\x39\xc8\x74\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; je  +3; inc %d; push %d;*/
-  "\xE\x3", "<",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7d\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jge +3; inc %d; push %d;*/
-  "\xE\x3", ">",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7e\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jle +3; inc %d; push %d;*/
-  "\x6\x3", "-",  "\x59\x58\x48\x29\xc8\x50", /* ASM: pop %rcx; pop %rax; sub %rcx, %rax; push %rax; */
-  "\x6\x3", "+",  "\x59\x58\x48\x01\xc8\x50", /* ASM: pop %rcx; pop %rax; add %rcx, %rax; push %rax; */
-  "\x6\x3", "&",  "\x59\x58\x48\x21\xc8\x50", /* ASM: pop %rcx; pop %rax; and %rcx, %rax; push %rax; */
-  "\x6\x3", "|",  "\x59\x58\x48\x09\xc8\x50", /* ASM: pop %rcx; pop %rax; or  %rcx, %rax; push %rax; */
-  "\x6\x3", "^",  "\x59\x58\x48\x31\xc8\x50", /* ASM: pop %rcx; pop %rax; xor %rcx, %rax; push %rax; */
-  "\x6\x3", "*",  "\x59\x58\x48\xf7\xe1\x50", /* ASM: pop %rcx; pop %rax; mul %rcx;       push %rax; */
-  "\x8\x3", "/",  "\x59\x58\x48\x99\x48\xf7\xf9\x50", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rax; */
-  "\x8\x3", "%",  "\x59\x58\x48\x99\x48\xf7\xf9\x52", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rdx; */
-  "\x6\x2", "=",  "\x59\x58\x48\x89\x08\x51", /* ASM: pop %rcx; pop %rax; mov %rcx, (%rax); push %rcx; */
+  "\xC\x2", "<<=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe0\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shl %c, %a; mov %a, (%b); push %a; */
+  "\xC\x2", ">>=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shr %c, %a; mov %a, (%b); push %a; */
+  "\x6\x3", "<<",  "\x59\x58\x48\xd3\xe0\x50", /* ASM: pop %rcx; pop %rax; shl %cl, %rax; push %rax; */
+  "\x6\x3", ">>",  "\x59\x58\x48\xd3\xe8\x50", /* ASM: pop %rcx; pop %rax; shr %cl, %rax; push %rax; */
+  "\xE\x3", "<=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7f\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jg  +3; inc %d; push %d;*/
+  "\xE\x3", ">=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7c\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jl  +3; inc %d; push %d;*/
+  "\xE\x3", "==",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x75\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jne +3; inc %d; push %d;*/
+  "\xE\x3", "!=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x74\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; je  +3; inc %d; push %d;*/
+  "\xC\x2", "+=",  "\x59\x5b\x48\x8b\x03\x48\x01\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; add %c, %a; mov %a, (%b); push %a; */
+  "\xC\x2", "-=",  "\x59\x5b\x48\x8b\x03\x48\x29\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; sub %c, %a; mov %a, (%b); push %a; */
+  "\xC\x2", "&=",  "\x59\x5b\x48\x8b\x03\x48\x21\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; and %c, %a; mov %a, (%b); push %a; */
+  "\xC\x2", "|=",  "\x59\x5b\x48\x8b\x03\x48\x09\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; or  %c, %a; mov %a, (%b); push %a; */
+  "\xC\x2", "^=",  "\x59\x5b\x48\x8b\x03\x48\x31\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; xor %c, %a; mov %a, (%b); push %a; */
+  "\xC\x2", "*=",  "\x59\x5b\x48\x8b\x03\x48\xf7\xe1\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; mul %c;     mov %a, (%b); push %a; */
+  "\xE\x2", "/=",  "\x59\x5b\x48\x8b\x03\x48\x99\x48\xf7\xf9\x48\x89\x03\x50", /*ASM: pop %c; pop %b; mov (%b),%a; cqto; idiv %c; mov %a,(%b); push %a;*/
+  "\xE\x2", "%=",  "\x59\x5b\x48\x8b\x03\x48\x99\x48\xf7\xf9\x48\x89\x13\x52", /*ASM: pop %c; pop %b; mov (%b),%a; cqto; idiv %c; mov %d,(%b); push %d;*/
+  "\xE\x3", "<",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7d\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jge +3; inc %d; push %d;*/
+  "\xE\x3", ">",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7e\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jle +3; inc %d; push %d;*/
+  "\x6\x3", "-",   "\x59\x58\x48\x29\xc8\x50", /* ASM: pop %rcx; pop %rax; sub %rcx, %rax; push %rax; */
+  "\x6\x3", "+",   "\x59\x58\x48\x01\xc8\x50", /* ASM: pop %rcx; pop %rax; add %rcx, %rax; push %rax; */
+  "\x6\x3", "&",   "\x59\x58\x48\x21\xc8\x50", /* ASM: pop %rcx; pop %rax; and %rcx, %rax; push %rax; */
+  "\x6\x3", "|",   "\x59\x58\x48\x09\xc8\x50", /* ASM: pop %rcx; pop %rax; or  %rcx, %rax; push %rax; */
+  "\x6\x3", "^",   "\x59\x58\x48\x31\xc8\x50", /* ASM: pop %rcx; pop %rax; xor %rcx, %rax; push %rax; */
+  "\x6\x3", "*",   "\x59\x58\x48\xf7\xe1\x50", /* ASM: pop %rcx; pop %rax; mul %rcx;       push %rax; */
+  "\x8\x3", "/",   "\x59\x58\x48\x99\x48\xf7\xf9\x50", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rax; */
+  "\x8\x3", "%",   "\x59\x58\x48\x99\x48\xf7\xf9\x52", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rdx; */
+  "\x6\x2", "=",   "\x59\x58\x48\x89\x08\x51", /* ASM: pop %rcx; pop %rax; mov %rcx, (%rax); push %rcx; */
   NULL /* NOTE: it goes like: length, level, token, and instructions */
 };
 
@@ -89,13 +99,14 @@ static s32 emit_bytes(s32 size, void *data)
   return (exesize - size);
 }
 
-static char *scan_if(s32 die_if_false, s32 condition, char *message)
+static char *scan_if(s32 condition, char *optional_death_message_if_false)
 {
   char *start = NULL;
+  int i = 0;
   
   if (!condition)
   {
-    die_if(die_if_false, message);
+    die_if(optional_death_message_if_false != NULL, optional_death_message_if_false);
     return NULL;
   }
   
@@ -133,11 +144,18 @@ skip_spaces_and_comments:
     die_if(*cp == '\0', "missing \' or \" at the end");
     ++cp;
   }
-  else if (start[0] != '\0' && cp == start)
+  else
   {
-    cp += ((cp[0] == '<' && cp[1] == '<') || (cp[0] == '>' && cp[1] == '>')
-        || (cp[0] == '<' && cp[1] == '=') || (cp[0] == '>' && cp[1] == '=')
-        || (cp[0] == '=' && cp[1] == '=') || (cp[0] == '!' && cp[1] == '=')) ? 2 : 1;
+    for (i = 0; optable[i] != NULL; i += 3)
+    {
+      if (memcmp(start, optable[i + 1], strlen(optable[i + 1])) == 0)
+      {
+        cp += strlen(optable[i + 1]);
+        break;
+      }
+    }
+    
+    cp += (start[0] != '\0' && cp == start) ? 1 : 0;
   }
   
   prevtok = currtok;
@@ -149,7 +167,7 @@ skip_spaces_and_comments:
 
 static s32 rvalue_from(s32 value)
 {
-  if (value == 8) /* lvalue of u64 or s64 */
+  if (value == 8) /* lvalue of u64/s64 */
   {
     emit_bytes(5, "\x58\x48\x8b\x00\x50"); /* ASM: pop %rax; mov (%rax), %rax; push %rax; */
   }
@@ -170,11 +188,10 @@ static Sym *sym_declare(char *name)
   }
   
   topsym += 1;
-  sym = topsym;
-  die_if((char *)sym == (char *)symtab + sizeof(symtab), "out of symbol table");
-  memset(sym, 0, sizeof(*sym));
-  sym->name = name;
-  return sym;
+  die_if((char *)topsym == (char *)symtab + sizeof(symtab), "out of symbol table");
+  memset(topsym, 0, sizeof(*topsym));
+  topsym->name = name;
+  return topsym;
 }
 
 static void compile_string_literal(s32 length, char *token)
@@ -185,13 +202,11 @@ static void compile_string_literal(s32 length, char *token)
 
   for (i = 0; i < length; ++i)
   {
-    if (token[i + 0] != '\\')
+    byte = token[i];
+  
+    if (token[i] == '\\')
     {
-      byte = token[i];
-    }
-    else
-    {
-      n = 1 + (isxdigit(token[i + 2]) != 0);
+      n = isxdigit(token[i + 2]) ? 2 : 1;
       byte = u64_from_string(n, token + i + 1, 16);
       i += n;
     }
@@ -211,7 +226,38 @@ static s32 compile_expression(s32 level)
   s32 i = 0;
   s32 count = 0;
   
-  if (scan_if(0, (isalpha(currtok[0]) || currtok[0] == '_'), NULL)) /* FEATURE: get symbol value */
+  if (scan_if(isdigit(currtok[0]), NULL)) /* FEATURE: integer constant */
+  {
+    off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
+    *(u64 *)(exebuff + off1) = u64_from_string(strlen(prevtok), prevtok, 0);
+  }
+  else if (scan_if(currtok[0] == '\'', NULL)) /* FEATURE: character constant */
+  {
+    off1 = exesize;
+    compile_string_literal(strlen(prevtok) - 2, prevtok + 1);
+    
+    for (i = off1; i < exesize - 1; ++i)
+    {
+      constant = (constant << 8) + ((unsigned char *)exebuff)[i];
+    }
+    
+    exesize = off1;
+    off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
+    *(u64 *)(exebuff + off1) = constant;
+  }
+  else if (scan_if(currtok[0] == '\"', NULL)) /* FEATURE: string literal */
+  {
+    off1 = 1 + emit_bytes(5, "\xe8\0\0\0\0"); /* ASM: call <rel32> */
+    compile_string_literal(strlen(prevtok) - 2, prevtok + 1);
+    *(s32 *)(exebuff + off1) = exesize - off1 - 4;
+    /* NOTE: we have the address on the stack thanks to the call instruction jumping over the string */
+  }
+  else if (scan_if(strcmp(currtok, "return") == 0, NULL)) /* FEATURE: return statement */
+  {
+    value = rvalue_from(compile_expression(0)); /* techinally that makes it a prefix operator */
+    emit_bytes(3, "\x58\xc9\xc3"); /* ASM: pop rax; leave; ret; */
+  }
+  else if (scan_if(isalpha(currtok[0]) || currtok[0] == '_', NULL)) /* FEATURE: get symbol value */
   {
     sym = sym_declare(prevtok);
     value = 8;
@@ -228,51 +274,25 @@ static s32 compile_expression(s32 level)
       sym->toprela = off1; /* the new top rela points to the old one forming a linked list */
     }
   }
-  else if (scan_if(0, (isdigit(currtok[0])), NULL)) /* FEATURE: integer constant */
-  {
-    off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
-    *(u64 *)(exebuff + off1) = u64_from_string(strlen(prevtok), prevtok, 0);
-  }
-  else if (scan_if(0, (currtok[0] == '\''), NULL)) /* FEATURE: character constant */
-  {
-    off1 = exesize;
-    compile_string_literal(strlen(prevtok) - 2, prevtok + 1);
-    
-    for (i = off1; i < exesize - 1; ++i)
-    {
-      constant = (constant << 8) + ((unsigned char *)exebuff)[i];
-    }
-    
-    exesize = off1;
-    off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
-    *(u64 *)(exebuff + off1) = constant;
-  }
-  else if (scan_if(0, (currtok[0] == '\"'), NULL)) /* FEATURE: string literal */
-  {
-    off1 = 1 + emit_bytes(5, "\xe8\0\0\0\0"); /* ASM: call <rel32> */
-    compile_string_literal(strlen(prevtok) - 2, prevtok + 1);
-    *(s32 *)(exebuff + off1) = exesize - off1 - 4;
-    /* NOTE: we have the address on the stack thanks to the call instruction jumping over the string */
-  }
-  else if (scan_if(0, (strcmp(currtok, "&") == 0), NULL)) /* FEATURE: pointer to value */
+  else if (scan_if(strcmp(currtok, "&") == 0, NULL)) /* FEATURE: pointer to value */
   {
     value = compile_expression(3);
     die_if(value == 0, "prefix '&' operator requires an lvalue");
     value = 0;
   }
-  else if (scan_if(0, (strcmp(currtok, "*") == 0), NULL)) /* FEATURE: value by pointer */
+  else if (scan_if(strcmp(currtok, "*") == 0, NULL)) /* FEATURE: value by pointer */
   {
     rvalue_from(compile_expression(3));
     value = 8;
   }
   else /* FEATURE: sub-expression */
   {
-    scan_if(1, (strcmp(currtok, "(") == 0), "unknown primary expression");
+    scan_if(strcmp(currtok, "(") == 0, "unknown primary expression");
     value = compile_expression(0);
-    scan_if(1, (strcmp(currtok, ")") == 0), "missing ')'");
+    scan_if(strcmp(currtok, ")") == 0, "missing ')'");
   }
   
-  for (count = 0; scan_if(0, (strcmp(currtok, "(") == 0), NULL); count = 0) /* FEATURE: function call */
+  for (count = 0; scan_if(strcmp(currtok, "(") == 0, NULL); count = 0) /* FEATURE: function call */
   {
     if (strcmp(currtok, ")") != 0)
     {
@@ -281,10 +301,10 @@ static s32 compile_expression(s32 level)
         rvalue_from(compile_expression(0));
         count += 1;
       }
-      while (scan_if(0, (strcmp(currtok, ",") == 0), NULL));
+      while (scan_if(strcmp(currtok, ",") == 0, NULL));
     }
     
-    scan_if(1, (strcmp(currtok, ")") == 0), "missing ')'");
+    scan_if(strcmp(currtok, ")") == 0, "missing ')'");
     
     for (i = 0; i < count + 1; ++i) /* repush the arguments and the function pointer in the correct order */
     {
@@ -300,9 +320,9 @@ static s32 compile_expression(s32 level)
   
 binary_operators_left_to_right:
 
-  for (i = 0; optable[i] != NULL && level < optable[i][1]; i += 3)
+  for (i = 0; optable[i] != NULL; i += 3)
   {
-    if (scan_if(0, (strcmp(currtok, optable[i + 1]) == 0), NULL))
+    if (level < optable[i][1] && scan_if(strcmp(currtok, optable[i + 1]) == 0, NULL))
     {
       die_if(optable[i][1] == 2 && value == 0, "need an lvalue on the left"); /* only level 2 operators need an lvalue */
       rvalue_from((optable[i][1] == 2) ? 0 : value); /* only level 2 operators don't need an rvalue */
@@ -325,23 +345,23 @@ static void compile_statement(Sym *func)
 
   base_sym = topsym; /* FEATURE: limit the scope for local variables and function parameters */
 
-  if (scan_if(0, (strcmp(currtok, "{") == 0), NULL)) /* FEATURE: statement list */
+  if (scan_if(strcmp(currtok, "{") == 0, NULL)) /* FEATURE: statement list */
   {
     while (currtok[0] != '\0' && strcmp(currtok, "}") != 0)
     {
       compile_statement(func);
     }
   
-    scan_if(1, (strcmp(currtok, "}") == 0), "missing '}'");
+    scan_if(strcmp(currtok, "}") == 0, "missing '}'");
   }
-  else if (scan_if(0, (strcmp(currtok, "if") == 0), NULL)) /* FEATURE: if */
+  else if (scan_if(strcmp(currtok, "if") == 0, NULL)) /* FEATURE: if */
   {
     rvalue_from(compile_expression(0));
     off1 = 6 + emit_bytes(10, "\x58\x48\x85\xc0\x0f\x84\0\0\0\0"); /* ASM: pop %rax; test %rax, %rax; jz <rel32>; */
     compile_statement(func);
     *(s32 *)(exebuff + off1) = exesize - off1 - 4; /* jump over the true-branch */
     
-    if (scan_if(0, (strcmp(currtok, "else") == 0), NULL)) /* FEATURE: else */
+    if (scan_if(strcmp(currtok, "else") == 0, NULL)) /* FEATURE: else */
     {
       *(s32 *)(exebuff + off1) = (exesize + 5) - off1 - 4; /* goto else-branch */
       off1 = 1 + emit_bytes(5, "\xe9\0\0\0\0"); /* ASM: jmp <rel32>; */
@@ -349,7 +369,7 @@ static void compile_statement(Sym *func)
       *(s32 *)(exebuff + off1) = exesize - off1 - 4; /* jump over the else-branch */
     }
   }
-  else if (scan_if(0, (strcmp(currtok, "while") == 0), NULL)) /* FEATURE: while */
+  else if (scan_if(strcmp(currtok, "while") == 0, NULL)) /* FEATURE: while */
   {
     off2 = exesize;
     rvalue_from(compile_expression(0));
@@ -359,9 +379,9 @@ static void compile_statement(Sym *func)
     off1 = 1 + emit_bytes(5, "\xe9\0\0\0\0"); /* ASM: jmp <rel32>; */
     *(s32 *)(exebuff + off1) = off2 - off1 - 4; /* continue */
   }
-  else if (scan_if(0, (strcmp(currtok, "int") == 0), NULL)) /* FEATURE: symbol declaration */
+  else if (scan_if(strcmp(currtok, "int") == 0, NULL)) /* FEATURE: symbol declaration */
   {
-    scan_if(1, (isalpha(currtok[0]) || currtok[0] == '_'), "expected a name after int");
+    scan_if(isalpha(currtok[0]) || currtok[0] == '_', "expected a name after int");
     base_sym = sym_declare(prevtok);
     
     if (func == NULL) /* global variable OR function */
@@ -369,21 +389,21 @@ static void compile_statement(Sym *func)
       emit_bytes((exesize % 8 != 0) ? 8 - exesize % 8 : 0, "\0\0\0\0\0\0\0\0"); /* align 8 */
       base_sym->global = emit_bytes(8, "\0\0\0\0\0\0\0\0"); /* FEATURE: global variables */
       
-      if (scan_if(0, (strcmp(currtok, "(") == 0), NULL)) /* FEATURE: function definition */
+      if (scan_if(strcmp(currtok, "(") == 0, NULL)) /* FEATURE: function definition */
       {
         if (strcmp(currtok, ")") != 0) /* FEATURE: function parameters */
         {
           do
           {
-            scan_if(1, (strcmp(currtok, "int") == 0), "expected a type before argument name");
-            scan_if(1, (isalpha(currtok[0]) || currtok[0] == '_'), "expected the name of the argument");
-            sym_declare(prevtok)->local = 16 + off2 * 8;
-            off2 += 1; /* I use off2 to count parameters, please don't be confused */
+            scan_if(strcmp(currtok, "int") == 0, "expected a type before argument name");
+            scan_if(isalpha(currtok[0]) || currtok[0] == '_', "expected the name of the argument");
+            sym_declare(prevtok)->local = 16 + off2; /* 16 skips rbp and the return address */
+            off2 += 8; /* the offset for the next one */
           }
-          while (scan_if(0, (strcmp(currtok, ",") == 0), NULL));
+          while (scan_if(strcmp(currtok, ",") == 0, NULL));
         }
         
-        scan_if(1, (strcmp(currtok, ")") == 0), "expected ')'");
+        scan_if(strcmp(currtok, ")") == 0, "expected ')'");
         *(u64 *)(exebuff + base_sym->global) = 0x00400000 + exesize; /* store absolute address */
         off1 = 7 + emit_bytes(11, "\x55\x48\x89\xe5\x48\x81\xec\0\0\0\0"); /* ASM: push %rbp; mov %rsp, %rbp; sub $0, %rsp; */
         compile_statement(base_sym);
@@ -397,19 +417,13 @@ static void compile_statement(Sym *func)
       base_sym->local = -(func->frame_size); /* FEATURE: local variables */
     }
     
-    scan_if((strcmp(prevtok, "}") != 0 && strcmp(prevtok, ";") != 0), (strcmp(currtok, ";") == 0), "missing ';'");
+    scan_if(currtok[0] == ';', (prevtok[0] != '}' && prevtok[0] != ';') ? "missing ';'" : NULL);
   }
-  else
+  else /* FEATURE: expression statement */
   {
-    off2 = (scan_if(0, (strcmp(currtok, "return") == 0), NULL) != NULL); /* I use off2 as a boolean, please don't be confused */
-    rvalue_from(compile_expression(0)); /* FEATURE: expression statement */
+    rvalue_from(compile_expression(0));
     emit_bytes(1, "\x58"); /* ASM: pop rax; */
-    scan_if(1, (strcmp(currtok, ";") == 0), "missing ';'");
-    
-    if (off2) /* FEATURE: return statement */
-    {
-      emit_bytes(2, "\xc9\xc3"); /* ASM: leave; ret; */
-    }
+    scan_if(strcmp(currtok, ";") == 0, "missing ';'");
   }
   
   for (sym = topsym; sym != base_sym; --sym)
@@ -458,7 +472,7 @@ int main(int argc, char *argv[])
   
   sym_declare("main")->toprela = 0x88; /* FEATURE: user defines "int main(int argc, int argv)" as the entry point */
   
-  scan_if(0, 1, NULL); /* setup the lexer */
+  scan_if(1, NULL); /* setup the lexer */
   
   while (currtok[0] != '\0')
   {

@@ -1,8 +1,11 @@
 # binary files:
 demicc
-a
 
 # object files:
 *.o
 *.obj
+
+# garbage:
+a
+a.s
 

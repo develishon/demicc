@@ -19,14 +19,14 @@ int factorial(int number)
   if number <= 1
   {
     // expression, assignment operator, and decimal integer constant
-    // '=' evaluated right to left and has the highest precedence among binary operators
+    // assignment operators are evaluated right to left AFTER all other binary operators
     result = 1;
   }
   else
   {
     // function call, arithmetic operators '+', '-', '*', '/', and '%'
     result = factorial(number - 1);
-    result = result * number;
+    result *= number;
   }
   
   // return statement
@@ -65,7 +65,8 @@ int main(int argc, int argv)
     putstr(*arg);
     putchr('\A');
     
-    i = i + 1;
+    // compute-assignment operators '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '<<=', and '>>='
+    i += 1;
   }
 
   // return 0 by default
@@ -90,21 +91,21 @@ int putdec(int number)
   // implicit "!= 0"
   while number / power
   {
-    power = power * 10;
-    digits = digits + 1;
+    power *= 10;
+    digits += 1;
   }
   
   while digits > 0
   {
-    power = power / 10;
+    power /= 10;
     
-    // all binary operators (except '=') have the same precedence and evaluated left to right
+    // all non-assignment binary operators have the same precedence and evaluated left to right
     // read: c = (((number / power) % 10) + '0')
     c = number / power % 10 + '0';
     
     putchr(c);
     
-    digits = digits - 1;
+    digits -= 1;
   }
 }
 
@@ -117,7 +118,7 @@ int putchr(int chr)
   // bit shift operators '<<', and '>>'
   while chr >> count
   {
-    count = count + 8;
+    count += 8;
   }
   
   while count >= 0 
@@ -133,7 +134,7 @@ int putchr(int chr)
     
     write(1, &byte, 1);
     
-    count = count - 8;
+    count -= 8;
   }
   
   // 'byte' is not available outside of its scope
@@ -149,7 +150,7 @@ int strlen(int cstring)
   // int ld_u8(int pointer);
   while ld_u8(cstring)
     // single-statement body in 'while', 'if', 'else', and functions
-    cstring = cstring + 1;
+    cstring += 1;
   
   return cstring - start;
 }
