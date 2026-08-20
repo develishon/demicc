@@ -1,0 +1,25 @@
+// 002.dc - command line arguments
+
+int main(int argc, int argv)
+{
+  int i;
+  int cp;
+  
+  i = 0;
+  
+  while i < argc
+  {
+    cp = *(i * 8 + argv);
+    
+    while ld_u8(cp)
+    {
+      syscall(1, 1, cp, 1, 0, 0, 0);
+      cp = cp + 1;
+    }
+    
+    syscall(1, 1, "\A", 1, 0, 0, 0);
+    i = i + 1;
+  }
+}
+
+

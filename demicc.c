@@ -1,6 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
+/* VERSION: 1.0.1 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -13,11 +14,10 @@ typedef unsigned long u64;
 typedef int c89_static_assert_2[sizeof(u64) == 8 ? 1 : -1];
 
 typedef struct Sym {
-  struct Sym *prev; /* never ever use a linked list or else a meteor will destroy the Earth */
   char *name;
   s32 local; /* 0 means it is global not local */
   s32 global; /* 0 means undefined */
-  s32 toprela; /* more linked lists! */
+  s32 toprela; /* a linked list of relocations in exebuff */
   s32 frame_size;
 } Sym;
 
@@ -25,9 +25,10 @@ static char  srcbuff[0x1000000]; /* oh noooo! globalization is a threat to our l
 static char *cp = srcbuff;
 static char  exebuff[0x1000000];
 static s32   exesize;
-static Sym  *topsym;
 static char *currtok;
 static char *prevtok;
+static Sym   symtab[0x10000]; /* the first symbol is "null" */
+static Sym  *topsym = symtab;
 
 static char *optable[] = { /* FEATURE: binary operators: = << >> <= >= == != < > - + & | ^ * / % */
   "\x6\x3", "<<", "\x59\x58\x48\xd3\xe0\x50", /* ASM: pop %rcx; pop %rax; shl %cl, %rax; push %rax; */
@@ -158,22 +159,22 @@ static s32 rvalue_from(s32 value)
 
 static Sym *sym_declare(char *name)
 {
-  Sym *f = NULL;
+  Sym *sym = NULL;
   
-  for (f = topsym; f != NULL; f = f->prev)
+  for (sym = topsym; sym != symtab; --sym)
   {
-    if (strcmp(f->name, name) == 0)
+    if (strcmp(sym->name, name) == 0)
     {
-      return f;
+      return sym;
     }
   }
   
-  f = calloc(sizeof(*f), 1);
-  die_if(f == NULL, "out of memory");
-  f->name = name;
-  f->prev = topsym;
-  topsym = f;
-  return f;
+  topsym += 1;
+  sym = topsym;
+  die_if((char *)sym == (char *)symtab + sizeof(symtab), "out of symbol table");
+  memset(sym, 0, sizeof(*sym));
+  sym->name = name;
+  return sym;
 }
 
 static void compile_string_literal(s32 length, char *token)
@@ -317,7 +318,7 @@ binary_operators_left_to_right:
 
 static void compile_statement(Sym *func)
 {
-  Sym **symref = NULL;
+  Sym *sym = NULL;
   Sym *base_sym = NULL;
   s32 off1 = 0;
   s32 off2 = 0;
@@ -411,15 +412,12 @@ static void compile_statement(Sym *func)
     }
   }
   
-  for (symref = &topsym; symref[0] != NULL && symref[0] != base_sym; /* see else */)
+  for (sym = topsym; sym != base_sym; --sym)
   {
-    if (symref[0]->local)
+    if (sym->local)
     {
-      symref[0] = symref[0]->prev; /* yeah, that "leaks" every local. Deal with it! */
-    }
-    else
-    {
-      symref = &symref[0]->prev;
+      *sym = *topsym;
+      topsym -= 1;
     }
   }
 }
@@ -467,7 +465,7 @@ int main(int argc, char *argv[])
     compile_statement(NULL);
   }
   
-  for (sym = topsym; sym != NULL; sym = sym->prev)
+  for (sym = topsym; sym != symtab; --sym)
   {
     die_if(sym->global == 0, "undefined symbol");
     
