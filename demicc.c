@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.2.0 */
+/* VERSION: 1.2.1 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -30,35 +30,35 @@ static char *prevtok;
 static Sym   symtab[0x10000]; /* the first symbol is "null" */
 static Sym  *topsym = symtab;
 
-static char *optable[] = { /* FEATURE: binary operators: = << >> <= >= == != < > - + & | ^ * / % */
-  "\xC\x2", "<<=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe0\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shl %c, %a; mov %a, (%b); push %a; */
-  "\xC\x2", ">>=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shr %c, %a; mov %a, (%b); push %a; */
-  "\x6\x4", "<<",  "\x59\x58\x48\xd3\xe0\x50", /* ASM: pop %rcx; pop %rax; shl %cl, %rax; push %rax; */
-  "\x6\x4", ">>",  "\x59\x58\x48\xd3\xe8\x50", /* ASM: pop %rcx; pop %rax; shr %cl, %rax; push %rax; */
-  "\xE\x3", "<=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7f\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jg  +3; inc %d; push %d;*/
-  "\xE\x3", ">=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7c\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jl  +3; inc %d; push %d;*/
-  "\xE\x3", "==",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x75\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jne +3; inc %d; push %d;*/
-  "\xE\x3", "!=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x74\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; je  +3; inc %d; push %d;*/
-  "\xC\x2", "+=",  "\x59\x5b\x48\x8b\x03\x48\x01\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; add %c, %a; mov %a, (%b); push %a; */
-  "\xC\x2", "-=",  "\x59\x5b\x48\x8b\x03\x48\x29\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; sub %c, %a; mov %a, (%b); push %a; */
-  "\xC\x2", "&=",  "\x59\x5b\x48\x8b\x03\x48\x21\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; and %c, %a; mov %a, (%b); push %a; */
-  "\xC\x2", "|=",  "\x59\x5b\x48\x8b\x03\x48\x09\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; or  %c, %a; mov %a, (%b); push %a; */
-  "\xC\x2", "^=",  "\x59\x5b\x48\x8b\x03\x48\x31\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; xor %c, %a; mov %a, (%b); push %a; */
-  "\xC\x2", "*=",  "\x59\x5b\x48\x8b\x03\x48\xf7\xe1\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; mul %c;     mov %a, (%b); push %a; */
-  "\xE\x2", "/=",  "\x59\x5b\x48\x8b\x03\x48\x99\x48\xf7\xf9\x48\x89\x03\x50", /*ASM: pop %c; pop %b; mov (%b),%a; cqto; idiv %c; mov %a,(%b); push %a;*/
-  "\xE\x2", "%=",  "\x59\x5b\x48\x8b\x03\x48\x99\x48\xf7\xf9\x48\x89\x13\x52", /*ASM: pop %c; pop %b; mov (%b),%a; cqto; idiv %c; mov %d,(%b); push %d;*/
-  "\xE\x3", "<",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7d\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jge +3; inc %d; push %d;*/
-  "\xE\x3", ">",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7e\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jle +3; inc %d; push %d;*/
-  "\x6\x4", "-",   "\x59\x58\x48\x29\xc8\x50", /* ASM: pop %rcx; pop %rax; sub %rcx, %rax; push %rax; */
-  "\x6\x4", "+",   "\x59\x58\x48\x01\xc8\x50", /* ASM: pop %rcx; pop %rax; add %rcx, %rax; push %rax; */
-  "\x6\x4", "&",   "\x59\x58\x48\x21\xc8\x50", /* ASM: pop %rcx; pop %rax; and %rcx, %rax; push %rax; */
-  "\x6\x4", "|",   "\x59\x58\x48\x09\xc8\x50", /* ASM: pop %rcx; pop %rax; or  %rcx, %rax; push %rax; */
-  "\x6\x4", "^",   "\x59\x58\x48\x31\xc8\x50", /* ASM: pop %rcx; pop %rax; xor %rcx, %rax; push %rax; */
-  "\x6\x4", "*",   "\x59\x58\x48\xf7\xe1\x50", /* ASM: pop %rcx; pop %rax; mul %rcx;       push %rax; */
-  "\x8\x4", "/",   "\x59\x58\x48\x99\x48\xf7\xf9\x50", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rax; */
-  "\x8\x4", "%",   "\x59\x58\x48\x99\x48\xf7\xf9\x52", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rdx; */
-  "\x6\x2", "=",   "\x59\x58\x48\x89\x08\x51", /* ASM: pop %rcx; pop %rax; mov %rcx, (%rax); push %rcx; */
-  NULL /* NOTE: it goes like: length, level, token, and instructions */
+static char *optable[] = { /* FEATURE: binary operators: = -= += &= |= ^= *= /= %= <<= >>= <= >= == != < > - + & | ^ * / % << >> */
+  "\xC\3\2", "<<=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe0\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shl %c, %a; mov %a, (%b); push %a; */
+  "\xC\3\2", ">>=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shr %c, %a; mov %a, (%b); push %a; */
+  "\x6\6\7", "<<",  "\x59\x58\x48\xd3\xe0\x50", /* ASM: pop %rcx; pop %rax; shl %cl, %rax; push %rax; */
+  "\x6\6\7", ">>",  "\x59\x58\x48\xd3\xe8\x50", /* ASM: pop %rcx; pop %rax; shr %cl, %rax; push %rax; */
+  "\xE\4\5", "<=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7f\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jg  +3; inc %d; push %d;*/
+  "\xE\4\5", ">=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7c\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jl  +3; inc %d; push %d;*/
+  "\xE\4\5", "==",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x75\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jne +3; inc %d; push %d;*/
+  "\xE\4\5", "!=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x74\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; je  +3; inc %d; push %d;*/
+  "\xC\3\2", "+=",  "\x59\x5b\x48\x8b\x03\x48\x01\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; add %c, %a; mov %a, (%b); push %a; */
+  "\xC\3\2", "-=",  "\x59\x5b\x48\x8b\x03\x48\x29\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; sub %c, %a; mov %a, (%b); push %a; */
+  "\xC\3\2", "&=",  "\x59\x5b\x48\x8b\x03\x48\x21\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; and %c, %a; mov %a, (%b); push %a; */
+  "\xC\3\2", "|=",  "\x59\x5b\x48\x8b\x03\x48\x09\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; or  %c, %a; mov %a, (%b); push %a; */
+  "\xC\3\2", "^=",  "\x59\x5b\x48\x8b\x03\x48\x31\xc8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; xor %c, %a; mov %a, (%b); push %a; */
+  "\xC\3\2", "*=",  "\x59\x5b\x48\x8b\x03\x48\xf7\xe1\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; mul %c;     mov %a, (%b); push %a; */
+  "\xE\3\2", "/=",  "\x59\x5b\x48\x8b\x03\x48\x99\x48\xf7\xf9\x48\x89\x03\x50", /*ASM: pop %c; pop %b; mov (%b),%a; cqto; idiv %c; mov %a,(%b); push %a;*/
+  "\xE\3\2", "%=",  "\x59\x5b\x48\x8b\x03\x48\x99\x48\xf7\xf9\x48\x89\x13\x52", /*ASM: pop %c; pop %b; mov (%b),%a; cqto; idiv %c; mov %d,(%b); push %d;*/
+  "\xE\4\5", "<",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7d\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jge +3; inc %d; push %d;*/
+  "\xE\4\5", ">",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7e\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jle +3; inc %d; push %d;*/
+  "\x6\6\7", "-",   "\x59\x58\x48\x29\xc8\x50", /* ASM: pop %rcx; pop %rax; sub %rcx, %rax; push %rax; */
+  "\x6\6\7", "+",   "\x59\x58\x48\x01\xc8\x50", /* ASM: pop %rcx; pop %rax; add %rcx, %rax; push %rax; */
+  "\x6\6\7", "&",   "\x59\x58\x48\x21\xc8\x50", /* ASM: pop %rcx; pop %rax; and %rcx, %rax; push %rax; */
+  "\x6\6\7", "|",   "\x59\x58\x48\x09\xc8\x50", /* ASM: pop %rcx; pop %rax; or  %rcx, %rax; push %rax; */
+  "\x6\6\7", "^",   "\x59\x58\x48\x31\xc8\x50", /* ASM: pop %rcx; pop %rax; xor %rcx, %rax; push %rax; */
+  "\x6\6\7", "*",   "\x59\x58\x48\xf7\xe1\x50", /* ASM: pop %rcx; pop %rax; mul %rcx;       push %rax; */
+  "\x8\6\7", "/",   "\x59\x58\x48\x99\x48\xf7\xf9\x50", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rax; */
+  "\x8\6\7", "%",   "\x59\x58\x48\x99\x48\xf7\xf9\x52", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rdx; */
+  "\x6\3\2", "=",   "\x59\x58\x48\x89\x08\x51", /* ASM: pop %rcx; pop %rax; mov %rcx, (%rax); push %rcx; */
+  NULL /* NOTE: it goes like: length, level to test, level to pass, token, and instructions */
 };
 
 static void die_if(s32 condition, char *message)
@@ -302,11 +302,11 @@ binary_operators_left_to_right:
 
   for (i = 0; optable[i] != NULL; i += 3)
   {
-    if (level < optable[i][1] && scan_if(strcmp(currtok, optable[i + 1]) == 0, NULL))
+    if (optable[i][1] > level && scan_if(strcmp(currtok, optable[i + 1]) == 0, NULL))
     {
-      die_if(optable[i][1] == 2 && value == 0, "need an lvalue on the left"); /* only level 2 operators need an lvalue */
-      rvalue_from((optable[i][1] == 2) ? 0 : value); /* only level 2 operators don't need an rvalue */
-      value = rvalue_from(compile_expression(optable[i][1]));
+      die_if(optable[i][1] == 3 && value == 0, "need an lvalue on the left"); /* only level 3 operators need an lvalue */
+      rvalue_from((optable[i][1] == 3) ? 0 : value); /* only level 3 operators don't need an rvalue */
+      value = rvalue_from(compile_expression(optable[i][2]));
       emit_bytes(optable[i][0], optable[i + 2]);
       
       goto binary_operators_left_to_right;
