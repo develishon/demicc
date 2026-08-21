@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.1.2 */
+/* VERSION: 1.1.3 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -65,7 +65,7 @@ static void die_if(s32 condition, char *message)
 {
   if (condition)
   {
-    fprintf(stderr, "error: %s\n", message);
+    fprintf(stderr, "error: %s\ncontext: '%s' '%s'\n", message, prevtok, currtok);
     exit(1);
   }
 }
@@ -192,32 +192,6 @@ static u64 u64_from_string(s32 length, char *s, u64 base) /* base 10 means auto-
   return value;
 }
 
-static u64 compile_string_constant(s32 length, char *token)
-{
-  u64 constant = 0;
-  s32 i = 0;
-  s32 n = 0;
-  unsigned char byte = 0;
-
-  for (i = 0; i < length; ++i)
-  {
-    byte = token[i];
-  
-    if (token[i] == '\\')
-    {
-      n = isxdigit(token[i + 2]) ? 2 : 1;
-      byte = u64_from_string(n, token + i + 1, 16);
-      i += n;
-    }
-    
-    emit_bytes(1, &byte);
-    constant = (constant << 8) + byte;
-  }
-  
-  emit_bytes(1, "\0");
-  return constant;
-}
-
 static s32 compile_expression(s32 level)
 {
   Sym *sym = NULL;
@@ -226,26 +200,38 @@ static s32 compile_expression(s32 level)
   s32 off1 = 0;
   s32 i = 0;
   s32 count = 0;
+  s32 length = 0;
+  unsigned char byte = 0;
   
   if (scan_if(isdigit(currtok[0]), NULL)) /* FEATURE: integer constant */
   {
     off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
     *(u64 *)(exebuff + off1) = u64_from_string(strlen(prevtok), prevtok, 10);
   }
-  else if (scan_if(currtok[0] == '\'', NULL)) /* FEATURE: character constant */
+  else if (scan_if(currtok[0] == '\'' || currtok[0] == '\"', NULL)) /* FEATURE: textual constants */
   {
-    off1 = exesize;
-    constant = compile_string_constant(strlen(prevtok) - 2, prevtok + 1);
-    exesize = off1;
-    off1 = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
-    *(u64 *)(exebuff + off1) = constant;
-  }
-  else if (scan_if(currtok[0] == '\"', NULL)) /* FEATURE: string literal */
-  {
-    off1 = 1 + emit_bytes(5, "\xe8\0\0\0\0"); /* ASM: call <rel32> */
-    compile_string_constant(strlen(prevtok) - 2, prevtok + 1);
+    off1 = 1 + emit_bytes(5, "\xe9\0\0\0\0"); /* ASM: jmp <rel32> */
+    length = strlen(prevtok) - 1;
+
+    for (i = 1; i < length; ++i)
+    {
+      byte = prevtok[i];
+    
+      if (byte == '\\')
+      {
+        count = isxdigit(prevtok[i + 2]) ? 2 : 1;
+        byte = u64_from_string(count, prevtok + i + 1, 16);
+        i += count;
+      }
+      
+      emit_bytes(1, &byte);
+      constant = (constant << 8) + byte;
+    }
+    
+    emit_bytes(1, "\0");
     *(s32 *)(exebuff + off1) = exesize - off1 - 4;
-    /* NOTE: we have the address on the stack thanks to the call instruction jumping over the string */
+    i = 2 + emit_bytes(11, "\x48\xb8\0\0\0\0\0\0\0\0\x50"); /* ASM: movabs $0, %rax; push %rax; */
+    *(u64 *)(exebuff + i) = (prevtok[0] == '\"') ? 0x400000 + (u64)off1 + 4 : constant;
   }
   else if (scan_if(strcmp(currtok, "return") == 0, NULL)) /* FEATURE: return statement */
   {
@@ -452,9 +438,9 @@ int main(int argc, char *argv[])
     mov 24(%rbx), %rsi; mov 32(%rbx), %rdx; mov 40(%rbx), %r10; mov 48(%rbx), %r8; mov 56(%rbx), %r9; syscall; ret;
     ld_u8: mov 8(%rsp), %rax; movzb (%rax), %eax; ret; st_u8: mov 8(%rsp), %rax; mov 16(%rsp), %ecx; mov %cl, (%rax); ret; */
   
-  sym_declare("syscall")->global  = emit_bytes(8, "\x99\x00\x40\x00\x00\x00\x00\x00"); /* YES! hardcoded addresses */
-  sym_declare("ld_u8"  )->global  = emit_bytes(8, "\xBB\x00\x40\x00\x00\x00\x00\x00");
-  sym_declare("st_u8"  )->global  = emit_bytes(8, "\xC4\x00\x40\x00\x00\x00\x00\x00");
+  sym_declare("syscall")->global = emit_bytes(8, "\x99\x00\x40\x00\x00\x00\x00\x00"); /* YES! hardcoded addresses */
+  sym_declare("ld_u8"  )->global = emit_bytes(8, "\xBB\x00\x40\x00\x00\x00\x00\x00");
+  sym_declare("st_u8"  )->global = emit_bytes(8, "\xC4\x00\x40\x00\x00\x00\x00\x00");
   
   sym_declare("main")->toprela = 0x88; /* FEATURE: user defines "int main(int argc, int argv)" as the entry point */
   
