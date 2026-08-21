@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.1.3 */
+/* VERSION: 1.2.0 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -33,8 +33,8 @@ static Sym  *topsym = symtab;
 static char *optable[] = { /* FEATURE: binary operators: = << >> <= >= == != < > - + & | ^ * / % */
   "\xC\x2", "<<=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe0\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shl %c, %a; mov %a, (%b); push %a; */
   "\xC\x2", ">>=", "\x59\x5b\x48\x8b\x03\x48\xd3\xe8\x48\x89\x03\x50", /* ASM: pop %c; pop %b; mov (%b), %a; shr %c, %a; mov %a, (%b); push %a; */
-  "\x6\x3", "<<",  "\x59\x58\x48\xd3\xe0\x50", /* ASM: pop %rcx; pop %rax; shl %cl, %rax; push %rax; */
-  "\x6\x3", ">>",  "\x59\x58\x48\xd3\xe8\x50", /* ASM: pop %rcx; pop %rax; shr %cl, %rax; push %rax; */
+  "\x6\x4", "<<",  "\x59\x58\x48\xd3\xe0\x50", /* ASM: pop %rcx; pop %rax; shl %cl, %rax; push %rax; */
+  "\x6\x4", ">>",  "\x59\x58\x48\xd3\xe8\x50", /* ASM: pop %rcx; pop %rax; shr %cl, %rax; push %rax; */
   "\xE\x3", "<=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7f\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jg  +3; inc %d; push %d;*/
   "\xE\x3", ">=",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7c\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jl  +3; inc %d; push %d;*/
   "\xE\x3", "==",  "\x59\x58\x48\x31\xd2\x48\x39\xc8\x75\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jne +3; inc %d; push %d;*/
@@ -49,14 +49,14 @@ static char *optable[] = { /* FEATURE: binary operators: = << >> <= >= == != < >
   "\xE\x2", "%=",  "\x59\x5b\x48\x8b\x03\x48\x99\x48\xf7\xf9\x48\x89\x13\x52", /*ASM: pop %c; pop %b; mov (%b),%a; cqto; idiv %c; mov %d,(%b); push %d;*/
   "\xE\x3", "<",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7d\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jge +3; inc %d; push %d;*/
   "\xE\x3", ">",   "\x59\x58\x48\x31\xd2\x48\x39\xc8\x7e\x03\x48\xff\xc2\x52", /*ASM: pop %c; pop %a; xor %d, %d; cmp %c, %a; jle +3; inc %d; push %d;*/
-  "\x6\x3", "-",   "\x59\x58\x48\x29\xc8\x50", /* ASM: pop %rcx; pop %rax; sub %rcx, %rax; push %rax; */
-  "\x6\x3", "+",   "\x59\x58\x48\x01\xc8\x50", /* ASM: pop %rcx; pop %rax; add %rcx, %rax; push %rax; */
-  "\x6\x3", "&",   "\x59\x58\x48\x21\xc8\x50", /* ASM: pop %rcx; pop %rax; and %rcx, %rax; push %rax; */
-  "\x6\x3", "|",   "\x59\x58\x48\x09\xc8\x50", /* ASM: pop %rcx; pop %rax; or  %rcx, %rax; push %rax; */
-  "\x6\x3", "^",   "\x59\x58\x48\x31\xc8\x50", /* ASM: pop %rcx; pop %rax; xor %rcx, %rax; push %rax; */
-  "\x6\x3", "*",   "\x59\x58\x48\xf7\xe1\x50", /* ASM: pop %rcx; pop %rax; mul %rcx;       push %rax; */
-  "\x8\x3", "/",   "\x59\x58\x48\x99\x48\xf7\xf9\x50", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rax; */
-  "\x8\x3", "%",   "\x59\x58\x48\x99\x48\xf7\xf9\x52", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rdx; */
+  "\x6\x4", "-",   "\x59\x58\x48\x29\xc8\x50", /* ASM: pop %rcx; pop %rax; sub %rcx, %rax; push %rax; */
+  "\x6\x4", "+",   "\x59\x58\x48\x01\xc8\x50", /* ASM: pop %rcx; pop %rax; add %rcx, %rax; push %rax; */
+  "\x6\x4", "&",   "\x59\x58\x48\x21\xc8\x50", /* ASM: pop %rcx; pop %rax; and %rcx, %rax; push %rax; */
+  "\x6\x4", "|",   "\x59\x58\x48\x09\xc8\x50", /* ASM: pop %rcx; pop %rax; or  %rcx, %rax; push %rax; */
+  "\x6\x4", "^",   "\x59\x58\x48\x31\xc8\x50", /* ASM: pop %rcx; pop %rax; xor %rcx, %rax; push %rax; */
+  "\x6\x4", "*",   "\x59\x58\x48\xf7\xe1\x50", /* ASM: pop %rcx; pop %rax; mul %rcx;       push %rax; */
+  "\x8\x4", "/",   "\x59\x58\x48\x99\x48\xf7\xf9\x50", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rax; */
+  "\x8\x4", "%",   "\x59\x58\x48\x99\x48\xf7\xf9\x52", /* ASM: pop %rcx; pop %rax; cqto; idiv %rcx; push %rdx; */
   "\x6\x2", "=",   "\x59\x58\x48\x89\x08\x51", /* ASM: pop %rcx; pop %rax; mov %rcx, (%rax); push %rcx; */
   NULL /* NOTE: it goes like: length, level, token, and instructions */
 };
@@ -123,19 +123,17 @@ skip_spaces_and_comments:
     die_if(*cp == '\0', "missing \' or \" at the end");
     ++cp;
   }
-  else
+
+  for (i = 0; optable[i] != NULL; i += 3)
   {
-    for (i = 0; optable[i] != NULL; i += 3)
+    if (memcmp(start, optable[i + 1], strlen(optable[i + 1])) == 0)
     {
-      if (memcmp(start, optable[i + 1], strlen(optable[i + 1])) == 0)
-      {
-        cp += strlen(optable[i + 1]);
-        break;
-      }
+      cp += strlen(optable[i + 1]);
+      break;
     }
-    
-    cp += (start[0] != '\0' && cp == start) ? 1 : 0;
   }
+  
+  cp += (start[0] != '\0' && cp == start) ? 1 : 0;
   
   prevtok = currtok;
   currtok = calloc(cp - start + 1, 1);
@@ -154,7 +152,7 @@ static s32 rvalue_from(s32 value)
   return 0;
 }
 
-static Sym *sym_declare(char *name)
+static Sym *sym_declare(char *name, s32 define)
 {
   Sym *sym = NULL;
   
@@ -162,6 +160,7 @@ static Sym *sym_declare(char *name)
   {
     if (strcmp(sym->name, name) == 0)
     {
+      die_if(define && (sym->local || sym->global), "name collision"); /* scopes don't allow it anyway so might as well be an error */
       return sym;
     }
   }
@@ -235,12 +234,12 @@ static s32 compile_expression(s32 level)
   }
   else if (scan_if(strcmp(currtok, "return") == 0, NULL)) /* FEATURE: return statement */
   {
-    value = rvalue_from(compile_expression(0)); /* techinally that makes it a prefix operator */
+    value = rvalue_from(compile_expression(0)); /* technically that makes it a prefix operator */
     emit_bytes(3, "\x58\xc9\xc3"); /* ASM: pop rax; leave; ret; */
   }
   else if (scan_if(isalpha(currtok[0]) || currtok[0] == '_', NULL)) /* FEATURE: get symbol value */
   {
-    sym = sym_declare(prevtok);
+    sym = sym_declare(prevtok, 0);
     value = 8;
   
     if (sym->local)
@@ -354,7 +353,7 @@ static void compile_statement(Sym *func)
   else if (scan_if(strcmp(currtok, "int") == 0, NULL)) /* FEATURE: symbol declaration */
   {
     scan_if(isalpha(currtok[0]) || currtok[0] == '_', "expected a name after int");
-    base_sym = sym_declare(prevtok);
+    base_sym = sym_declare(prevtok, 1);
     
     if (func == NULL) /* global variable OR function */
     {
@@ -369,7 +368,7 @@ static void compile_statement(Sym *func)
           {
             scan_if(strcmp(currtok, "int") == 0, "expected a type before argument name");
             scan_if(isalpha(currtok[0]) || currtok[0] == '_', "expected the name of the argument");
-            sym_declare(prevtok)->local = 16 + off2; /* 16 skips rbp and the return address */
+            sym_declare(prevtok, 1)->local = 16 + off2; /* 16 skips rbp and the return address */
             off2 += 8; /* the offset for the next one */
           }
           while (scan_if(strcmp(currtok, ",") == 0, NULL));
@@ -438,11 +437,11 @@ int main(int argc, char *argv[])
     mov 24(%rbx), %rsi; mov 32(%rbx), %rdx; mov 40(%rbx), %r10; mov 48(%rbx), %r8; mov 56(%rbx), %r9; syscall; ret;
     ld_u8: mov 8(%rsp), %rax; movzb (%rax), %eax; ret; st_u8: mov 8(%rsp), %rax; mov 16(%rsp), %ecx; mov %cl, (%rax); ret; */
   
-  sym_declare("syscall")->global = emit_bytes(8, "\x99\x00\x40\x00\x00\x00\x00\x00"); /* YES! hardcoded addresses */
-  sym_declare("ld_u8"  )->global = emit_bytes(8, "\xBB\x00\x40\x00\x00\x00\x00\x00");
-  sym_declare("st_u8"  )->global = emit_bytes(8, "\xC4\x00\x40\x00\x00\x00\x00\x00");
+  sym_declare("syscall", 1)->global = emit_bytes(8, "\x99\x00\x40\x00\x00\x00\x00\x00"); /* YES! hardcoded addresses */
+  sym_declare("ld_u8"  , 1)->global = emit_bytes(8, "\xBB\x00\x40\x00\x00\x00\x00\x00");
+  sym_declare("st_u8"  , 1)->global = emit_bytes(8, "\xC4\x00\x40\x00\x00\x00\x00\x00");
   
-  sym_declare("main")->toprela = 0x88; /* FEATURE: user defines "int main(int argc, int argv)" as the entry point */
+  sym_declare("main", 0)->toprela = 0x88; /* FEATURE: user defines "int main(int argc, int argv)" as the entry point */
   
   scan_if(1, NULL); /* setup the lexer */
   

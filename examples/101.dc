@@ -10,6 +10,11 @@
 // zero initialized global variable
 int g;
 
+// operator precedence:
+// + - * / % | ^ & << >>
+// != == < > <= >=
+// = += -= *= /= %= |= ^= &= <<= >>=
+
 int factorial(int number)
 {
   // uninitialized local variable
@@ -19,7 +24,6 @@ int factorial(int number)
   if number <= 1
   {
     // expression, assignment operator, and decimal integer constant
-    // assignment operators are evaluated right to left AFTER all other binary operators
     result = 1;
   }
   else
@@ -99,7 +103,6 @@ int putdec(int number)
   {
     power /= 10;
     
-    // all non-assignment binary operators have the same precedence and evaluated left to right
     // read: c = (((number / power) % 10) + '0')
     c = number / power % 10 + '0';
     

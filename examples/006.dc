@@ -1,0 +1,64 @@
+// 006.dc - prime numbers
+
+int main()
+{
+  int i;
+  int n;
+  int k;
+  int found;
+  
+  i = 0;
+  n = 100;
+  
+  while i < n
+  {
+    i += 1;
+    k = i - 1;
+    found = 0;
+    
+    while k > 1
+    {
+      if 0 == i % k
+      {
+        found = 1;
+      }
+      
+      k -= 1;
+    }
+    
+    if found == 0
+    {
+      putchr(' ');
+      putdec(i);
+      putchr(0x0A);
+    }
+  }
+}
+
+int putdec(int number)
+{
+  int power;
+  
+  power = 10;
+  
+  while 0 != number / power
+  {
+    power *= 10;
+  }
+  
+  while power > 1
+  {
+    power /= 10;
+    putchr(number / power % 10 + '0');
+  }
+}
+
+int putchr(int ch)
+{
+  int byte;
+  
+  st_u8(&byte, ch);
+  syscall(1, 1, &byte, 1, 0, 0, 0);
+}
+
+
