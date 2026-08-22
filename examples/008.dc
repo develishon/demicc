@@ -1,0 +1,156 @@
+// 008.dc - Lexer
+
+int c0;
+int c1;
+int token;
+
+int main()
+{
+  // setup the lexer:
+  next();
+  next();
+  gettok();
+  
+  // read all tokens
+  while token
+  {
+    putchr('  ');
+    putchr('"');
+    putchr(token);
+    putchr('"');
+    putchr('\A');
+    gettok();
+  }
+}
+
+int gettok()
+{
+  int loop;
+  
+  loop = 1;
+  
+  while loop
+  {
+    while (c0 == ' ') | (c0 == '\0A')
+    {
+      next();
+    }
+    
+    if (c0 == '/') & (c1 == '/')
+    {
+      next();
+      next();
+      
+      while (c0 >= 0) & (c0 != '\A')
+      {
+        next();
+      }
+    }
+    else if (c0 == '/') & (c1 == '*')
+    {
+      next();
+      next();
+      
+      while (c0 >= 0) & (((c0 == '*') & (c1 == '/')) == 0)
+      {
+        next();
+      }
+      
+      if c0 == '*'
+      {
+        next();
+        next();
+      }
+    }
+    else
+    {
+      loop = 0;
+    }
+  }
+  
+  token = 0;
+  
+  if c0 < 0
+  {
+    // EOF
+  }
+  else if isalnum(c0)
+  {
+    while isalnum(c0)
+    {
+      take_and_next();
+    }
+  }
+  else
+  {
+    take_and_next();
+  }
+  
+  return token;
+}
+
+int isalnum(int c)
+{
+  if ('0' <= c) & (c <= '9') return 1;
+  if ('A' <= c) & (c <= 'Z') return 1;
+  if ('a' <= c) & (c <= 'z') return 1;
+  
+  return c == '_';
+}
+
+int putchr(int chr)
+{
+  int count;
+  
+  count = 0;
+  
+  while chr >> count
+  {
+    count += 8;
+  }
+  
+  while count >= 0 
+  {
+    int byte;
+  
+    st_u8(&byte, chr >> count & 0xFF);
+    syscall(1, 1, &byte, 1, 0, 0, 0);
+    count -= 8;
+  }
+}
+
+int take_and_next()
+{
+  take();
+  next();
+}
+
+int take()
+{
+  token <<= 8;
+  token |= c0 & 0x7F;
+}
+
+int next()
+{
+  c0 = c1;
+  c1 = getchr();
+}
+
+int getchr()
+{
+  int byte;
+  int size;
+  
+  size = syscall(0, 0, &byte, 1, 0, 0, 0);
+  byte = ld_u8(&byte);
+  
+  if size <= 0
+  {
+    return 0 - 1;
+  }
+  
+  return byte;
+}
+
+

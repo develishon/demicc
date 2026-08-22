@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.2.1 */
+/* VERSION: 1.2.2 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -267,24 +267,24 @@ static s32 compile_expression(s32 level)
   }
   else /* FEATURE: sub-expression */
   {
-    scan_if(strcmp(currtok, "(") == 0, "unknown primary expression");
+    scan_if(currtok[0] == '(', "unknown primary expression");
     value = compile_expression(0);
-    scan_if(strcmp(currtok, ")") == 0, "missing ')'");
+    scan_if(currtok[0] == ')', "missing ')'");
   }
   
-  for (count = 0; scan_if(strcmp(currtok, "(") == 0, NULL); count = 0) /* FEATURE: function call */
+  for (count = 0; scan_if(currtok[0] == '(', NULL); count = 0) /* FEATURE: function call */
   {
-    if (strcmp(currtok, ")") != 0)
+    if (currtok[0] != ')')
     {
       do
       {
         rvalue_from(compile_expression(0));
         count += 1;
       }
-      while (scan_if(strcmp(currtok, ",") == 0, NULL));
+      while (scan_if(currtok[0] == ',', NULL));
     }
     
-    scan_if(strcmp(currtok, ")") == 0, "missing ')'");
+    scan_if(currtok[0] == ')', "missing ')'");
     
     for (i = 0; i < count + 1; ++i) /* repush the arguments and the function pointer in the correct order */
     {
@@ -325,14 +325,14 @@ static void compile_statement(Sym *func)
 
   base_sym = topsym; /* FEATURE: limit the scope for local variables and function parameters */
 
-  if (scan_if(strcmp(currtok, "{") == 0, NULL)) /* FEATURE: statement list */
+  if (scan_if(currtok[0] == '{', NULL)) /* FEATURE: statement list */
   {
-    while (currtok[0] != '\0' && strcmp(currtok, "}") != 0)
+    while (currtok[0] != '\0' && currtok[0] != '}')
     {
       compile_statement(func);
     }
   
-    scan_if(strcmp(currtok, "}") == 0, "missing '}'");
+    scan_if(currtok[0] == '}', "missing '}'");
   }
   else if (scan_if(strcmp(currtok, "if") == 0 || strcmp(currtok, "while") == 0, NULL)) /* FEATURE: if & while */
   {
@@ -357,12 +357,11 @@ static void compile_statement(Sym *func)
     
     if (func == NULL) /* global variable OR function */
     {
-      emit_bytes((exesize % 8 != 0) ? 8 - exesize % 8 : 0, "\0\0\0\0\0\0\0\0"); /* align 8 */
-      base_sym->global = emit_bytes(8, "\0\0\0\0\0\0\0\0"); /* FEATURE: global variables */
+      base_sym->global = emit_bytes(16 - exesize % 8, "\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0"); /* FEATURE: global variables (aligned) */
       
-      if (scan_if(strcmp(currtok, "(") == 0, NULL)) /* FEATURE: function definition */
+      if (scan_if(currtok[0] == '(', NULL)) /* FEATURE: function definition */
       {
-        if (strcmp(currtok, ")") != 0) /* FEATURE: function parameters */
+        if (currtok[0] != ')') /* FEATURE: function parameters */
         {
           do
           {
@@ -371,10 +370,10 @@ static void compile_statement(Sym *func)
             sym_declare(prevtok, 1)->local = 16 + off2; /* 16 skips rbp and the return address */
             off2 += 8; /* the offset for the next one */
           }
-          while (scan_if(strcmp(currtok, ",") == 0, NULL));
+          while (scan_if(currtok[0] == ',', NULL));
         }
         
-        scan_if(strcmp(currtok, ")") == 0, "expected ')'");
+        scan_if(currtok[0] == ')', "expected ')'");
         *(u64 *)(exebuff + base_sym->global) = 0x00400000 + exesize; /* store absolute address */
         off1 = 7 + emit_bytes(11, "\x55\x48\x89\xe5\x48\x81\xec\0\0\0\0"); /* ASM: push %rbp; mov %rsp, %rbp; sub $0, %rsp; */
         compile_statement(base_sym);
@@ -394,7 +393,7 @@ static void compile_statement(Sym *func)
   {
     rvalue_from(compile_expression(0));
     emit_bytes(1, "\x58"); /* ASM: pop rax; */
-    scan_if(strcmp(currtok, ";") == 0, "missing ';'");
+    scan_if(currtok[0] == ';', "missing ';'");
   }
   
   for (sym = topsym; sym != base_sym; --sym)
