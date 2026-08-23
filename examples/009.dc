@@ -1,0 +1,184 @@
+// 009.dc - bubble sort the lines
+
+int main()
+{
+  int lines_at;
+  int lines_capacity;
+  int file_at;
+  int file_size;
+  int file_capacity;
+
+  lines_capacity = 0x10000 * 8;
+  file_capacity = 0x1000000;
+
+  // lines_at = mmap(NULL, lines_capacity, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  lines_at = syscall(9, 0, lines_capacity, 1|2, 2|32, 0 - 1, 0);
+  
+  // file_at = mmap(NULL, file_capacity, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  file_at = syscall(9, 0, file_capacity, 1|2, 2|32, 0 - 1, 0);
+  
+  if (lines_at == 0 - 1) | (file_at == 0 - 1)
+  {
+    // exit(1);
+    syscall(60, 1, 0, 0, 0, 0, 0);
+  }
+  
+  file_capacity -= 1;
+  lines_capacity -= 8;
+  
+  int lines_next;
+  int lines_end;
+  
+  lines_end = lines_at + lines_capacity;
+  lines_next = lines_at;
+  
+  // read:
+  
+  int last_line;
+  
+  last_line = 1; // anything but NULL
+  
+  while last_line
+  {
+    last_line = 0;
+    
+    if lines_next < lines_end
+    {
+      int offset;
+      int length;
+      int loop;
+    
+      loop = 1;
+      offset = file_size;
+    
+      while loop
+      {
+        int ch;
+      
+        ch = 0 - 1;
+        
+        if file_size < file_capacity
+        {
+          int size;
+          int ptr;
+        
+          ptr = file_at + file_size;
+          size = syscall(0, 0, ptr, 1, 0, 0, 0);
+          
+          if size == 1
+          {
+            ch = ld_u8(ptr);
+            file_size += 1;
+          }
+        }
+        
+        if (ch < 0) | (ch == '\A')
+        {
+          loop = 0;
+          length = file_size - offset;
+          
+          if ch == '\A'
+          {
+            length -= 1;
+            st_u8(file_at + file_size - 1, '\0');
+          }
+          
+          if (length != 0) | (ch == '\A')
+          {
+            last_line = file_at + offset;
+            *lines_next = last_line;
+            lines_next += 8;
+          }
+        }
+      }
+    }
+  }
+  
+  // sort:
+  
+  int li;
+  
+  li = lines_at;
+  
+  while li < lines_next
+  {
+    int bestref;
+    int temp;
+    int lk;
+  
+    lk = li;
+    bestref = li;
+    
+    while lk < lines_next
+    {
+      if strcmp(*bestref, *lk) > 0
+      {
+        bestref = lk;
+      }
+      
+      lk += 8;
+    }
+    
+    temp = *li;
+    *li = *bestref;
+    *bestref = temp;
+    
+    li += 8;
+  }
+  
+  // write:
+
+  li = lines_at;
+  
+  while li < lines_next
+  {
+    putstr(*li);
+    putchr('\A');
+    li += 8;
+  }
+}
+
+int strcmp(int a, int b)
+{
+  while (ld_u8(a) == ld_u8(b)) & (ld_u8(a) != '\0')
+  {
+    a += 1;
+    b += 1;
+  }
+  
+  return ld_u8(a) - ld_u8(b);
+}
+
+int putchr(int ch)
+{
+  int byte;
+  
+  st_u8(&byte, ch);
+  return write(1, &byte, 1);
+}
+
+int putstr(int s)
+{
+  return write(1, s, strlen(s));
+}
+
+int write(int fd, int buf, int size)
+{
+  return syscall(1, fd, buf, size, 0, 0, 0);
+}
+
+int strlen(int s)
+{
+  int s0;
+  
+  s0 = s;
+  
+  while ld_u8(s) != '\0'
+  {
+    s += 1;
+  }
+  
+  return s - s0;
+}
+
+
