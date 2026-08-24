@@ -1,0 +1,90 @@
+// 012.dc - write TGA in memory
+
+int main()
+{
+  int hdrsize;
+  int tgasize;
+  int w;
+  int h;
+  int tga;
+  int stream;
+  int streamref;
+  
+  w = 800;
+  h = 600;
+  hdrsize = 18;
+  tgasize = w * h * 4 + hdrsize;
+  
+  // tga = mmap(NULL, tgasize, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  tga = syscall(9, 0, tgasize, 1|2, 2|32, 0 - 1, 0);
+  
+  if tga == 0 - 1
+  {
+    // exit(1);
+    syscall(60, 1, 0, 0, 0, 0, 0);
+  }
+  
+  stream = tga;
+  streamref = &stream;
+  
+  // TGA header:
+  wbyte(streamref, 0);  // char  idLength;
+  wbyte(streamref, 0);  // char  colorMapType;
+  wbyte(streamref, 2);  // char  dataTypeCode; (uncompressed BGRA)
+  wle16(streamref, 0);  // short colorMapOrigin;
+  wle16(streamref, 0);  // short colorMapLength;
+  wbyte(streamref, 0);  // char  colorMapDepth;
+  wle16(streamref, 0);  // short xOrigin;
+  wle16(streamref, 0);  // short yOrigin;
+  wle16(streamref, w);  // short width;
+  wle16(streamref, h);  // short height;
+  wbyte(streamref, 32); // char  bitsPerPixel;
+  wbyte(streamref, 0);  // char  imageDescriptor;
+  
+  // pixels:
+  int x;
+  int y;
+  
+  y = 0;
+  while y < h
+  {
+    x = 0;
+    while x < w
+    {
+      wbyte(streamref, 0); // B
+      wbyte(streamref, y * 256 / h); // G
+      wbyte(streamref, w - x - 1 * 256 / w); // R
+      wbyte(streamref, 255); // A
+      x += 1;
+    }
+  
+    y += 1;
+  }
+  
+  // save to file:
+  int fd;
+  
+  // fd = open("a.tga", O_WRONLY|O_CREAT|O_TRUNC, 0640);
+  fd = syscall(2, "a.tga", 1 | 64 | 512, 0x1A0, 0, 0, 0);
+  
+  if fd < 0
+  {
+    return 1;
+  }
+  
+  syscall(1, fd, tga, tgasize, 0, 0, 0);
+}
+
+int wbyte(int streamref, int _u8)
+{
+  st_u8(*streamref, _u8);
+  *streamref += 1;
+}
+
+int wle16(int streamref, int le16)
+{
+  wbyte(streamref, le16 >> 0 & 0xFF);
+  wbyte(streamref, le16 >> 8 & 0xFF);
+}
+
+
