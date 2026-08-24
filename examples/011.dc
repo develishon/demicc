@@ -1,0 +1,69 @@
+// 011.dc - write TGA
+
+int wbyte(int fd, int _u8)
+{
+  int byte;
+  
+  st_u8(&byte, _u8);
+  syscall(1, fd, &byte, 1, 0, 0, 0);
+}
+
+int wle16(int fd, int le16)
+{
+  wbyte(fd, le16 >> 0 & 0xFF);
+  wbyte(fd, le16 >> 8 & 0xFF);
+}
+
+int main()
+{
+  int fd;
+  int w;
+  int h;
+  
+  // fd = open("a.tga", O_WRONLY|O_CREAT|O_TRUNC, 0640);
+  fd = syscall(2, "a.tga", 1 | 64 | 512, 0x1A0, 0, 0, 0);
+  
+  if fd < 0
+  {
+    return 1;
+  }
+  
+  w = 800;
+  h = 600;
+  
+  // TGA header:
+  wbyte(fd, 0);  // char  idLength;
+  wbyte(fd, 0);  // char  colorMapType;
+  wbyte(fd, 2);  // char  dataTypeCode;
+  wle16(fd, 0);  // short colorMapOrigin;
+  wle16(fd, 0);  // short colorMapLength;
+  wbyte(fd, 0);  // char  colorMapDepth;
+  wle16(fd, 0);  // short xOrigin;
+  wle16(fd, 0);  // short yOrigin;
+  wle16(fd, w);  // short width;
+  wle16(fd, h);  // short height;
+  wbyte(fd, 32); // char  bitsPerPixel;
+  wbyte(fd, 0);  // char  imageDescriptor;
+  
+  // pixels:
+  int x;
+  int y;
+  
+  y = 0;
+  while y < h
+  {
+    x = 0;
+    while x < w
+    {
+      wbyte(fd, y * 256 / h); // B
+      wbyte(fd, 0); // G
+      wbyte(fd, x * 256 / w); // R
+      wbyte(fd, 255); // A
+      x += 1;
+    }
+  
+    y += 1;
+  }
+}
+
+

@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.2.3 */
+/* VERSION: 1.2.4 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -61,11 +61,11 @@ static char *optable[] = { /* FEATURE: binary operators: = -= += &= |= ^= *= /= 
   NULL /* NOTE: it goes like: length, level to test, level to pass, token, and instructions */
 };
 
-static void die_if(s32 condition, char *message)
+static void die_if(s32 condition, char *message, char *optional_token)
 {
   if (condition)
   {
-    fprintf(stderr, "error: %s\ncontext: '%s' '%s'\n", message, prevtok, currtok);
+    fprintf(stderr, "error: %s\n%s\n", message, (optional_token != NULL) ? optional_token : "");
     exit(1);
   }
 }
@@ -73,7 +73,7 @@ static void die_if(s32 condition, char *message)
 static s32 emit_bytes(s32 size, void *data)
 {
   exesize += size;
-  die_if(exesize > (s32)sizeof(exebuff), "out of buffer");
+  die_if(exesize > (s32)sizeof(exebuff), "out of buffer", currtok);
   memcpy(exebuff + (exesize - size), data, size);
   return (exesize - size);
 }
@@ -85,7 +85,7 @@ static char *scan_if(s32 condition, char *optional_death_message_if_false)
   
   if (!condition)
   {
-    die_if(optional_death_message_if_false != NULL, optional_death_message_if_false);
+    die_if(optional_death_message_if_false != NULL, optional_death_message_if_false, currtok);
     return NULL;
   }
   
@@ -120,7 +120,7 @@ skip_spaces_and_comments:
       ++cp;
     }
     
-    die_if(*cp == '\0', "missing \' or \" at the end");
+    die_if(*cp == '\0', "missing \' or \" at the end", currtok);
     ++cp;
   }
 
@@ -137,7 +137,7 @@ skip_spaces_and_comments:
   
   prevtok = currtok;
   currtok = calloc(cp - start + 1, 1);
-  die_if(currtok == NULL, "out of memory");
+  die_if(currtok == NULL, "out of memory", prevtok);
   memcpy(currtok, start, cp - start);
   return prevtok;
 }
@@ -160,13 +160,13 @@ static Sym *sym_declare(char *name, s32 define)
   {
     if (strcmp(sym->name, name) == 0)
     {
-      die_if(define && (sym->local || sym->global), "name collision"); /* scopes don't allow it anyway so might as well be an error */
+      die_if(define && (sym->local || sym->global), "name collision", name); /* scopes don't allow it anyway so might as well be an error */
       return sym;
     }
   }
   
   topsym += 1;
-  die_if((char *)topsym == (char *)symtab + sizeof(symtab), "out of symbol table");
+  die_if((char *)topsym == (char *)symtab + sizeof(symtab), "out of symbol table", name);
   memset(topsym, 0, sizeof(*topsym));
   topsym->name = name;
   return topsym;
@@ -184,7 +184,7 @@ static u64 u64_from_string(s32 length, char *s, u64 base) /* base 10 means auto-
   
   for (i = 0; i < length; ++i)
   {
-    die_if(!isxdigit(s[i]), "invalid integer constant or escape sequence");
+    die_if(!isxdigit(s[i]), "invalid integer constant or escape sequence", currtok);
     value = (value * base) + (isdigit(s[i]) ? s[i] - '0' : isupper(s[i]) ? s[i] - 'A' + 10 : s[i] - 'a' + 10);
   }
   
@@ -257,7 +257,7 @@ static s32 compile_expression(s32 level)
   else if (scan_if(strcmp(currtok, "&") == 0, NULL)) /* FEATURE: pointer to value */
   {
     value = compile_expression(9);
-    die_if(value == 0, "prefix '&' operator requires an lvalue");
+    die_if(value == 0, "prefix '&' operator requires an lvalue", prevtok);
     value = 0;
   }
   else if (scan_if(strcmp(currtok, "*") == 0, NULL)) /* FEATURE: value by pointer */
@@ -304,7 +304,7 @@ binary_operators_left_to_right:
   {
     if (optable[i][1] > level && scan_if(strcmp(currtok, optable[i + 1]) == 0, NULL))
     {
-      die_if(optable[i][1] == 3 && value == 0, "need an lvalue on the left"); /* only level 3 operators need an lvalue */
+      die_if(optable[i][1] == 3 && value == 0, "need an lvalue on the left", currtok); /* only level 3 operators need an lvalue */
       rvalue_from((optable[i][1] == 3) ? 0 : value); /* only level 3 operators don't need an rvalue */
       value = rvalue_from(compile_expression(optable[i][2]));
       emit_bytes(optable[i][0], optable[i + 2]);
@@ -412,9 +412,9 @@ int main(int argc, char *argv[])
   Sym *sym = NULL;
   s32 offset = 0;
   
-  die_if(argc != 3, "need output then input as command line arguments");
+  die_if(argc != 3, "need output then input as command line arguments", NULL);
   stream = fopen(argv[2], "rb");
-  die_if(stream == NULL, "no such file");
+  die_if(stream == NULL, "no such file", argv[2]);
   fread(srcbuff, 1, sizeof(srcbuff) - 1, stream); /* who needs fclose anyway... */
 
   emit_bytes(13 * 16, /* Elf64_Ehdr and Elf64_Phdr are the same every time except for p_filesz and p_memsz */
@@ -451,7 +451,7 @@ int main(int argc, char *argv[])
   
   for (sym = topsym; sym != symtab; --sym)
   {
-    die_if(sym->global == 0, "undefined symbol");
+    die_if(sym->global == 0, "undefined symbol", sym->name);
     
     while (sym->toprela != 0)
     {
@@ -465,7 +465,7 @@ int main(int argc, char *argv[])
   *(s32 *)(exebuff + 64 + 40) = exesize; /* p_memsz */
   
   stream = fopen(argv[1], "wb");
-  die_if(stream == NULL, "fopen");
+  die_if(stream == NULL, "fopen", argv[1]);
   fwrite(exebuff, 1, exesize, stream);
   return 0;
 }
