@@ -1,7 +1,7 @@
 /* FILE: demicc.c - DemiC compiler that outputs Static Little Endian x86-64 ELF Executables */
 /* BUILD: cc -o demicc demicc.c */
 /* USAGE: demicc <output> <input> */
-/* VERSION: 1.2.2 */
+/* VERSION: 1.2.3 */
 
 #include <ctype.h>
 #include <stdio.h>
@@ -256,13 +256,13 @@ static s32 compile_expression(s32 level)
   }
   else if (scan_if(strcmp(currtok, "&") == 0, NULL)) /* FEATURE: pointer to value */
   {
-    value = compile_expression(3);
+    value = compile_expression(9);
     die_if(value == 0, "prefix '&' operator requires an lvalue");
     value = 0;
   }
   else if (scan_if(strcmp(currtok, "*") == 0, NULL)) /* FEATURE: value by pointer */
   {
-    rvalue_from(compile_expression(3));
+    rvalue_from(compile_expression(9));
     value = 8;
   }
   else /* FEATURE: sub-expression */
